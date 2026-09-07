@@ -1,0 +1,50 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String    @id @default(cuid())
+  email     String    @unique
+  name      String?
+  password  String
+  createdAt DateTime  @default(now())
+  holdings  Holding[]
+}
+
+model Holding {
+  id       String   @id @default(cuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ticker   String
+  shares   Float
+  buyPrice Float?
+  buyDate  DateTime
+  createdAt DateTime @default(now())
+  @@index([userId])
+}
+
+// Daily snapshot of the stock universe, populated by a scheduled yfinance job
+// (see scripts/fetch_market_data.py) since FMP's free/starter tier no longer
+// exposes index-constituent lists or batch quotes.
+model MarketSnapshot {
+  symbol      String   @id
+  name        String
+  sector      String
+  price       Float
+  yearHigh    Float?   @map("year_high")
+  pctFromHigh Float?   @map("pct_from_high")
+  marketCap   Float?   @map("market_cap")
+  pe          Float?
+  peg         Float?
+  roe         Float?
+  de          Float?
+  opMargin    Float?   @map("op_margin")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("market_snapshot")
+}
