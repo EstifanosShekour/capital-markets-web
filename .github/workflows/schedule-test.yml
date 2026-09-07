@@ -1,9 +1,0 @@
-name: Schedule Test
-on:
-  schedule:
-    - cron: "0 22 * * 1-5"
-jobs:
-  hello:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "hello"
