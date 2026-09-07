@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
+import Anthropic from "@anthropic-ai/sdk";
 import { auth } from "@/lib/auth";
 import { cikFor, latest10Q, fetch10QText } from "@/lib/sec";
 
-export const maxDuration = 60;
+// Generating a full analysis has measured 60-95s (large filing + long JSON
+// output) with real variance, so this needs headroom under Vercel's 300s
+// Hobby/Fluid ceiling.
+export const maxDuration = 180;
 export const dynamic = "force-dynamic";
 
 const SYSTEM =
@@ -34,15 +38,19 @@ export async function POST(req: Request) {
       "key_risks (array), bull_case, bear_case, red_flags (array), fundamental_conviction (int 1-10)." +
       `\n\nFILING:\n${text}`;
 
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({ model: model || "claude-sonnet-4-6", max_tokens: 4000,
-        system: SYSTEM, messages: [{ role: "user", content: prompt }] }),
+    const client = new Anthropic({ apiKey: key });
+    const stream = client.messages.stream({
+      model: model || "claude-sonnet-4-6",
+      max_tokens: 4000,
+      system: SYSTEM,
+      messages: [{ role: "user", content: prompt }],
     });
-    if (!res.ok) return NextResponse.json({ symbol, error: `Anthropic ${res.status}` }, { status: 200 });
-    const data = await res.json();
-    let raw = (data.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
+    const response = await stream.finalMessage();
+
+    let raw = response.content
+      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .map((b) => b.text)
+      .join("");
     raw = raw.replace(/^```(?:json)?|```$/gm, "").trim();
     const m = raw.match(/\{[\s\S]*\}/);
     const analysis = JSON.parse(m ? m[0] : raw);
